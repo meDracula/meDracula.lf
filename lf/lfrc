@@ -1,0 +1,66 @@
+# Settings
+set shellopts '-eu'
+set ifs "\n"
+set scrolloff 10
+set drawbox
+set hidden
+set relativenumber
+set period 1
+set autoquit true
+
+# Previewer and cleaner
+set previewer ctpv
+set cleaner ctpvclear
+&ctpv -s $id
+&ctpvquit $id
+
+# Functions
+cmd open &{{
+    case $(file --mime-type -Lb $f) in
+        text/*) lf -remote "send $id \$$EDITOR \$fx";;
+        *) for f in $fx; do $OPENER $f > /dev/null 2> /dev/null & done;;
+    esac
+}}
+
+# Bookmarks
+cmd bookmark_jump ${{
+    res="$(cat $LF_BOOKMARK_FILE | fzf)"
+    lf -remote "send $id cd \"$res\""
+}}
+
+cmd bookmark_create ${{
+    echo $PWD >> $LF_BOOKMARK_FILE
+}}
+
+# CD fzf
+cmd fzf_jump ${{
+    res="$(fdfind --hidden -E .git/ | fzf --preview 'bat --color=always --style=numbers {}' --reverse --header='Jump to location' )"
+    if [ -n "$res" ]; then
+        if [ -d "$res" ]; then
+            cmd="cd"
+        else
+            cmd="select"
+        fi
+        res="$(printf '%s' "$res" | sed 's/\\/\\\\/g;s/"/\\"/g')"
+        lf -remote "send $id $cmd \"$res\""
+    fi
+}}
+
+# fzf with ripgrep
+cmd rg_search ${{
+    RG_PREFIX="rg --column --line-number --no-heading --color=always --smart-case "
+    res="$(
+        FZF_DEFAULT_COMMAND="$RG_PREFIX ''" \
+            fzf --bind "change:reload:$RG_PREFIX {q} || true" \
+            --ansi --layout=reverse --header 'Search in files' \
+            | cut -d':' -f1 | sed 's/\\/\\\\/g;s/"/\\"/g'
+    )"
+    [ -n "$res" ] && lf -remote "send $id select \"$res\""
+}}
+
+# Bindings
+map <enter> :open
+map <c-s> :rg_search
+map <c-f> :fzf_jump
+map i $LESSOPEN='| ~/.config/lf/scope.sh %s' batcat --paging=always $f
+map <c-b> :bookmark_jump
